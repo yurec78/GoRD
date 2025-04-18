@@ -13,8 +13,8 @@ var (
 )
 
 type Collection struct {
-	Config    *CollectionConfig
-	Documents map[string]Document
+	config    *CollectionConfig
+	documents map[string]Document
 }
 
 type CollectionConfig struct {
@@ -23,9 +23,9 @@ type CollectionConfig struct {
 
 // Put додає документ у колекцію або повертає помилку, якщо щось пішло не так
 func (c *Collection) Put(doc Document) error {
-	keyField, ok := doc.Fields[c.Config.PrimaryKey]
+	keyField, ok := doc.Fields[c.config.PrimaryKey]
 	if !ok {
-		return fmt.Errorf("missing '%s' field", c.Config.PrimaryKey)
+		return fmt.Errorf("missing '%s' field", c.config.PrimaryKey)
 	}
 	if keyField.Type != DocumentFieldTypeString {
 		return ErrInvalidKeyType
@@ -36,13 +36,13 @@ func (c *Collection) Put(doc Document) error {
 		return ErrEmptyKey
 	}
 
-	c.Documents[key] = doc
+	c.documents[key] = doc
 	return nil
 }
 
 // Get намагається отримати документ за ключем, повертає помилку, якщо документ не знайдений
 func (c *Collection) Get(key string) (*Document, error) {
-	doc, ok := c.Documents[key]
+	doc, ok := c.documents[key]
 	if !ok {
 		return nil, ErrDocumentNotFound
 	}
@@ -51,18 +51,18 @@ func (c *Collection) Get(key string) (*Document, error) {
 
 // Delete намагається видалити документ за ключем, повертає помилку, якщо документ не знайдений
 func (c *Collection) Delete(key string) error {
-	_, ok := c.Documents[key]
+	_, ok := c.documents[key]
 	if !ok {
 		return ErrDocumentNotFound
 	}
-	delete(c.Documents, key)
+	delete(c.documents, key)
 	return nil
 }
 
 // List повертає всі документи в колекції
 func (c *Collection) List() []Document {
-	result := make([]Document, 0, len(c.Documents))
-	for _, doc := range c.Documents {
+	result := make([]Document, 0, len(c.documents))
+	for _, doc := range c.documents {
 		result = append(result, doc)
 	}
 	return result

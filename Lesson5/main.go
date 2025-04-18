@@ -8,23 +8,14 @@ import (
 )
 
 func main() {
-	// Створюємо новий магазин документів
+	// Створюємо новий Store
 	store := documentstore.NewStore()
 
-	// Створюємо нову колекцію для користувачів
-	_, err := store.CreateCollection("users", &documentstore.CollectionConfig{PrimaryKey: "key"})
+	// Ініціалізуємо сервіс користувачів (він сам створить колекцію)
+	userService, err := users.NewService(store, "users", "key")
 	if err != nil {
-		log.Fatalf("Error creating collection: %v", err)
+		log.Fatalf("failed to initialize user service: %v", err)
 	}
-
-	// Отримуємо колекцію користувачів
-	coll, err := store.GetCollection("users")
-	if err != nil {
-		log.Fatalf("Error getting collection: %v", err)
-	}
-
-	// Створюємо сервіс для користувачів
-	userService := users.NewService(*coll)
 
 	// Створюємо нового користувача
 	user1, err := userService.CreateUser("John Doe")

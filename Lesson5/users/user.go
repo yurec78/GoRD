@@ -23,10 +23,23 @@ type Service struct {
 	coll documentstore.Collection
 }
 
-func NewService(coll documentstore.Collection) *Service {
-	return &Service{coll: coll}
-}
+func NewService(store *documentstore.Store, collectionName, primaryKey string) (*Service, error) {
+	// Створюємо колекцію, якщо ще не існує
+	_, err := store.CreateCollection(collectionName, &documentstore.CollectionConfig{
+		PrimaryKey: primaryKey,
+	})
+	if err != nil && !errors.Is(err, documentstore.ErrCollectionAlreadyExists) {
+		return nil, fmt.Errorf("failed to create collection: %w", err)
+	}
 
+	// Отримуємо колекцію
+	coll, err := store.GetCollection(collectionName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get collection: %w", err)
+	}
+
+	return &Service{coll: *coll}, nil
+}
 func (s *Service) CreateUser(name string) (*User, error) {
 	user := &User{
 		ID:   uuid.NewString(),
@@ -56,30 +69,19 @@ func (s *Service) CreateUser(name string) (*User, error) {
 }
 
 func (s *Service) ListUsers() ([]User, error) {
-	var users []User
-
 	// Отримуємо всі документи з колекції
 	documents, err := s.coll.GetAll()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get documents: %v", err)
 	}
 
+	users := make([]User, 0, len(documents)) // задаємо початкову ємність
+
 	for _, doc := range documents {
-		// Перевірка наявності поля "name"
-		nameField, ok := doc.Fields["name"]
-		if !ok || nameField.Type != documentstore.DocumentFieldTypeString {
-			continue // Якщо поля немає або воно не типу "string", пропускаємо документ
-		}
-
-		name, ok := nameField.Value.(string)
-		if !ok {
-			continue // Якщо значення "name" не рядок, пропускаємо
-		}
-
-		// Додаємо користувача в список
-		user := User{
-			ID:   doc.Fields["key"].Value.(string), // Поле "key" містить ID
-			Name: name,
+		var user User
+		err := documentstore.UnmarshalDocument(&doc, &user)
+		if err != nil {
+			continue // Пропускаємо, якщо не вдалося розпакувати
 		}
 		users = append(users, user)
 	}
@@ -94,40 +96,19 @@ func (s *Service) GetUser(userID string) (*User, error) {
 		return nil, ErrUserNotFound
 	}
 
-	// Перевіряємо наявність полів "id" і "name"
-	idField, ok := doc.Fields["id"]
-	if !ok || idField.Type != documentstore.DocumentFieldTypeString {
-		return nil, fmt.Errorf("missing or invalid 'id' field")
+	var user User
+	err = documentstore.UnmarshalDocument(doc, &user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal user: %w", err)
 	}
 
-	nameField, ok := doc.Fields["name"]
-	if !ok || nameField.Type != documentstore.DocumentFieldTypeString {
-		return nil, fmt.Errorf("missing or invalid 'name' field")
-	}
-
-	user := &User{
-		ID:   idField.Value.(string),
-		Name: nameField.Value.(string),
-	}
-
-	return user, nil
+	return &user, nil
 }
 
 func (s *Service) DeleteUser(userID string) error {
-	// Перевірка наявності документа
-	doc, ok := s.coll.Documents[userID]
-	if !ok {
+	err := s.coll.Delete(userID)
+	if err != nil {
 		return ErrUserNotFound
 	}
-
-	// Перевірка поля "key"
-	keyField, ok := doc.Fields["key"]
-	if !ok || keyField.Type != documentstore.DocumentFieldTypeString {
-		return fmt.Errorf("invalid or missing 'key' field")
-	}
-
-	// Видалення документа
-	delete(s.coll.Documents, userID)
-
 	return nil
 }

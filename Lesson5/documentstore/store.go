@@ -8,41 +8,43 @@ import (
 
 // Визначення помилок
 var (
-	ErrCollectionAlreadyExists = errors.New("collection already exists")
-	ErrCollectionNotFound      = errors.New("collection not found")
-	ErrInvalidDataField        = errors.New("document does not contain a valid 'data' field")
-	ErrInvalidDataFieldValue   = errors.New("invalid 'data' field value")
-	ErrMarshalFailed           = errors.New("failed to marshal input")
-	ErrUnmarshalFailed         = errors.New("failed to unmarshal into object")
+	ErrCollectionAlreadyExists  = errors.New("collection already exists")
+	ErrCollectionNotFound       = errors.New("collection not found")
+	ErrInvalidDataField         = errors.New("document does not contain a valid 'data' field")
+	ErrInvalidDataFieldValue    = errors.New("invalid 'data' field value")
+	ErrMarshalFailed            = errors.New("failed to marshal input")
+	ErrUnmarshalFailed          = errors.New("failed to unmarshal into object")
+	ErrUnmarshalToMapFailed     = errors.New("failed to unmarshal JSON to map")
+	ErrUnsupportedDocumentField = errors.New("unsupported document field type")
 )
 
 type Store struct {
-	Collections map[string]*Collection
+	collections map[string]*Collection
 }
 
 func NewStore() *Store {
 	return &Store{
-		Collections: make(map[string]*Collection),
+		collections: make(map[string]*Collection),
 	}
 }
 
 // CreateCollection створює нову колекцію, якщо вона не існує
 func (s *Store) CreateCollection(name string, cfg *CollectionConfig) (*Collection, error) {
-	if _, exists := s.Collections[name]; exists {
+	if _, exists := s.collections[name]; exists {
 		return nil, ErrCollectionAlreadyExists
 	}
 
 	collection := &Collection{
-		Config:    cfg,
-		Documents: make(map[string]Document),
+		config:    cfg,
+		documents: make(map[string]Document),
 	}
-	s.Collections[name] = collection
+	s.collections[name] = collection
 	return collection, nil
 }
 
 // GetCollection повертає колекцію за ім'ям
 func (s *Store) GetCollection(name string) (*Collection, error) {
-	col, ok := s.Collections[name]
+	col, ok := s.collections[name]
 	if !ok {
 		return nil, ErrCollectionNotFound
 	}
@@ -51,46 +53,73 @@ func (s *Store) GetCollection(name string) (*Collection, error) {
 
 // DeleteCollection видаляє колекцію за ім'ям
 func (s *Store) DeleteCollection(name string) error {
-	_, ok := s.Collections[name]
+	_, ok := s.collections[name]
 	if !ok {
 		return ErrCollectionNotFound
 	}
-	delete(s.Collections, name)
+	delete(s.collections, name)
 	return nil
 }
 
 // GetAll повертає всі документи колекції
 func (c *Collection) GetAll() ([]Document, error) {
-	if len(c.Documents) == 0 {
+	if len(c.documents) == 0 {
 		return nil, ErrDocumentNotFound
 	}
-	var docs []Document
-	for _, doc := range c.Documents {
+
+	docs := make([]Document, 0, len(c.documents)) // попередньо виділяємо місце
+	for _, doc := range c.documents {
 		docs = append(docs, doc)
 	}
 	return docs, nil
 }
 
-// MarshalDocument перетворює вхідний тип в документ
 func MarshalDocument(input any) (*Document, error) {
-	// Спочатку маршалимо вхідний об'єкт в JSON
+	// Спочатку маршалимо вхідний об'єкт у JSON
 	data, err := json.Marshal(input)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrMarshalFailed, err)
 	}
 
-	// Тепер створюємо документ
+	// Розпарсимо JSON у map[string]any
+	var raw map[string]any
+	err = json.Unmarshal(data, &raw)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrUnmarshalToMapFailed, err)
+	}
+
+	// Створюємо документ
 	doc := &Document{
 		Fields: make(map[string]DocumentField),
 	}
 
-	// Зберігаємо серіалізовані дані в полі документа "data"
-	doc.Fields["data"] = DocumentField{
-		Type:  DocumentFieldTypeString,
-		Value: string(data),
+	// Перетворюємо кожне поле у відповідний тип DocumentField
+	for key, value := range raw {
+		field, err := toDocumentField(value)
+		if err != nil {
+			return nil, fmt.Errorf("%w: field '%s'", ErrUnsupportedDocumentField, key)
+		}
+		doc.Fields[key] = field
 	}
 
 	return doc, nil
+}
+
+func toDocumentField(value any) (DocumentField, error) {
+	switch v := value.(type) {
+	case string:
+		return DocumentField{Type: DocumentFieldTypeString, Value: v}, nil
+	case float64: // JSON числа парсяться як float64
+		return DocumentField{Type: DocumentFieldTypeNumber, Value: v}, nil
+	case bool:
+		return DocumentField{Type: DocumentFieldTypeBool, Value: v}, nil
+	case []any:
+		return DocumentField{Type: DocumentFieldTypeArray, Value: v}, nil
+	case map[string]any:
+		return DocumentField{Type: DocumentFieldTypeObject, Value: v}, nil
+	default:
+		return DocumentField{}, ErrUnsupportedDocumentField
+	}
 }
 
 // UnmarshalDocument перетворює документ назад в тип структури
