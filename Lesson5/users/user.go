@@ -46,21 +46,20 @@ func (s *Service) CreateUser(name string) (*User, error) {
 		Name: name,
 	}
 
-	doc := documentstore.Document{
-		Fields: map[string]documentstore.DocumentField{
-			"key": {
-				Type:  documentstore.DocumentFieldTypeString,
-				Value: user.ID,
-			},
-			"name": {
-				Type:  documentstore.DocumentFieldTypeString,
-				Value: user.Name,
-			},
-		},
+	// Серіалізуємо користувача у документ
+	doc, err := documentstore.MarshalDocument(user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal user: %w", err)
+	}
+
+	// Додаємо ключове поле вручну (оскільки MarshalDocument не знає про "key")
+	doc.Fields["key"] = documentstore.DocumentField{
+		Type:  documentstore.DocumentFieldTypeString,
+		Value: user.ID,
 	}
 
 	// Перевірка, чи документ успішно додано
-	err := s.coll.Put(doc)
+	err = s.coll.Put(*doc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user: %v", err)
 	}
