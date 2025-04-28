@@ -2,7 +2,7 @@ package documentstore
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"os"
 )
 
@@ -10,10 +10,10 @@ import (
 func (s *Store) Dump() ([]byte, error) {
 	dump, err := json.Marshal(s)
 	if err != nil {
-		log.Printf("STORE DUMP FAILED: Помилка маршалінгу JSON: %v", err)
+		slog.Error("STORE DUMP FAILED", slog.Any("error", err), slog.String("message", "Помилка маршалінгу JSON"))
 		return nil, err
 	}
-	log.Println("STORE DUMPED: Створено дамп сховища")
+	slog.Debug("STORE DUMPED", slog.String("message", "Створено дамп сховища"), slog.String("dump_json", string(dump)))
 	return dump, nil
 }
 
@@ -21,15 +21,15 @@ func (s *Store) Dump() ([]byte, error) {
 func (s *Store) DumpToFile(filename string) error {
 	data, err := s.Dump()
 	if err != nil {
-		log.Printf("STORE DUMP TO FILE FAILED: Помилка отримання дампу: %v", err)
+		slog.Error("STORE DUMP TO FILE FAILED", slog.Any("error", err), slog.String("message", "Помилка отримання дампу"))
 		return err
 	}
 	err = os.WriteFile(filename, data, 0644)
 	if err != nil {
-		log.Printf("STORE DUMP TO FILE FAILED: Помилка запису у файл '%s': %v", filename, err)
+		slog.Error("STORE DUMP TO FILE FAILED", slog.String("filename", filename), slog.Any("error", err), slog.String("message", "Помилка запису у файл"))
 		return err
 	}
-	log.Printf("STORE DUMPED TO FILE: Дамп сховища збережено у файл '%s'", filename)
+	slog.Info("STORE DUMPED TO FILE", slog.String("filename", filename), slog.String("message", "Дамп сховища збережено у файл"))
 	return nil
 }
 
@@ -38,10 +38,11 @@ func NewStoreFromDump(dump []byte) (*Store, error) {
 	var store Store
 	err := json.Unmarshal(dump, &store)
 	if err != nil {
-		log.Printf("STORE RESTORE FAILED: Помилка демаршалінгу JSON: %v", err)
+		slog.Error("STORE RESTORE FAILED", slog.Any("error", err), slog.String("dump_json", string(dump)), slog.String("message", "Помилка демаршалінгу JSON"))
 		return nil, err
 	}
-	log.Println("STORE RESTORED FROM DUMP: Сховище успішно відновлено з дампу")
+	slog.Info("STORE RESTORED FROM DUMP", slog.String("message", "Сховище успішно відновлено з дампу"))
+	slog.Debug("STORE RESTORED FROM DUMP", slog.Any("restored_store", store))
 	return &store, nil
 }
 
@@ -49,13 +50,14 @@ func NewStoreFromDump(dump []byte) (*Store, error) {
 func NewStoreFromFile(filename string) (*Store, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
-		log.Printf("STORE RESTORE FROM FILE FAILED: Помилка читання файлу '%s': %v", filename, err)
+		slog.Error("STORE RESTORE FROM FILE FAILED", slog.String("filename", filename), slog.Any("error", err), slog.String("message", "Помилка читання файлу"))
 		return nil, err
 	}
+	slog.Debug("STORE RESTORE FROM FILE", slog.String("filename", filename), slog.String("file_content", string(data)), slog.String("message", "Вміст файлу прочитано"))
 	store, err := NewStoreFromDump(data)
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("STORE RESTORED FROM FILE: Сховище успішно відновлено з файлу '%s'", filename)
+	slog.Info("STORE RESTORED FROM FILE", slog.String("filename", filename), slog.String("message", "Сховище успішно відновлено з файлу"))
 	return store, nil
 }
