@@ -1,7 +1,7 @@
 package main
 
 import (
-	"Lesson7/documentstore" // Замініть "yourmodule" на фактичний шлях
+	"Lesson7/documentstore"
 	"fmt"
 	"log/slog"
 	"os"
