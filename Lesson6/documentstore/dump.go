@@ -6,15 +6,36 @@ import (
 	"os"
 )
 
+// storeDump - тимчасова структура для дампа Store
+type storeDump struct {
+	Collections map[string]*collectionDump `json:"collections"`
+}
+
+// collectionDump - тимчасова структура для дампа Collection
+type collectionDump struct {
+	Config    *CollectionConfig   `json:"config"`
+	Documents map[string]Document `json:"documents"`
+}
+
 // Dump повертає дамп (JSON) усього Store: колекцій та документів
 func (s *Store) Dump() ([]byte, error) {
-	dump, err := json.Marshal(s)
+	dump := &storeDump{
+		Collections: make(map[string]*collectionDump),
+	}
+	for name, col := range s.collections {
+		dump.Collections[name] = &collectionDump{
+			Config:    col.config,
+			Documents: col.documents,
+		}
+	}
+
+	data, err := json.Marshal(dump)
 	if err != nil {
 		slog.Error("STORE DUMP FAILED", slog.Any("error", err), slog.String("message", "Помилка маршалінгу JSON"))
 		return nil, err
 	}
-	slog.Debug("STORE DUMPED", slog.String("message", "Створено дамп сховища"), slog.String("dump_json", string(dump)))
-	return dump, nil
+	slog.Debug("STORE DUMPED", slog.String("message", "Створено дамп сховища"), slog.String("dump_json", string(data)))
+	return data, nil
 }
 
 // DumpToFile зберігає дамп Store у файл
@@ -35,15 +56,28 @@ func (s *Store) DumpToFile(filename string) error {
 
 // NewStoreFromDump створює новий Store із JSON-дампу
 func NewStoreFromDump(dump []byte) (*Store, error) {
-	var store Store
-	err := json.Unmarshal(dump, &store)
+	var storeDumpData storeDump
+	err := json.Unmarshal(dump, &storeDumpData)
 	if err != nil {
 		slog.Error("STORE RESTORE FAILED", slog.Any("error", err), slog.String("dump_json", string(dump)), slog.String("message", "Помилка демаршалінгу JSON"))
 		return nil, err
 	}
+
+	store := NewStore() // Створюємо новий Store
+	for name, colDump := range storeDumpData.Collections {
+		collection := &Collection{
+			config:    colDump.Config,
+			documents: colDump.Documents,
+		}
+		if store.collections == nil {
+			store.collections = make(map[string]*Collection)
+		}
+		store.collections[name] = collection
+	}
+
 	slog.Info("STORE RESTORED FROM DUMP", slog.String("message", "Сховище успішно відновлено з дампу"))
 	slog.Debug("STORE RESTORED FROM DUMP", slog.Any("restored_store", store))
-	return &store, nil
+	return store, nil
 }
 
 // NewStoreFromFile читає дамп із файлу та відновлює Store
