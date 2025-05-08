@@ -160,14 +160,51 @@ func (c *Collection) updateIndexes(key string, doc Document) {
 		if !ok || fieldVal.Type != DocumentFieldTypeString {
 			continue
 		}
-		// remove old entry if exists
-		c.removeFromIndexes(key, doc)
-		index.Sorted = append(index.Sorted, indexedEntry{Key: key, Document: doc})
-		sort.Slice(index.Sorted, func(i, j int) bool {
-			vi := index.Sorted[i].Document.Fields[field].Value.(string)
-			vj := index.Sorted[j].Document.Fields[field].Value.(string)
-			return vi < vj
+
+		valueToInsert, ok := fieldVal.Value.(string)
+		if !ok {
+			slog.Error("updateIndexes: potential panic - field value is not a string",
+				slog.String("key", key),
+				slog.String("field", field),
+				slog.Any("value_type", fmt.Sprintf("%T", fieldVal.Value)),
+			)
+			continue // Skip this index if the value is not a string
+		}
+
+		// Create a new filtered slice to build the updated index
+		filtered := index.Sorted[:0]
+		removed := false
+
+		// Iterate through the existing sorted index and add elements to the filtered slice
+		for _, e := range index.Sorted {
+			_, ok := e.Document.Fields[field].Value.(string)
+			if !ok {
+				slog.Error("updateIndexes: potential panic - existing field value is not a string",
+					slog.String("existing_key", e.Key),
+					slog.String("field", field),
+					slog.Any("value_type", fmt.Sprintf("%T", e.Document.Fields[field].Value)),
+				)
+				continue // Skip this entry if the existing value is not a string (shouldn't happen if index creation is correct)
+			}
+
+			if !removed && e.Key == key {
+				removed = true
+				continue
+			}
+			filtered = append(filtered, e)
+		}
+
+		// Find the insertion point for the new entry
+		insertIndex := sort.Search(len(filtered), func(i int) bool {
+			v, ok := filtered[i].Document.Fields[field].Value.(string)
+			return ok && v >= valueToInsert
 		})
+
+		// Insert the new entry at the correct position
+		filtered = append(filtered[:insertIndex], append([]indexedEntry{{Key: key, Document: doc}}, filtered[insertIndex:]...)...)
+
+		// Update the index's Sorted slice with the new filtered and inserted data
+		index.Sorted = filtered
 	}
 }
 
