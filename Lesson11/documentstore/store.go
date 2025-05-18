@@ -44,7 +44,6 @@ func (s *Store) CreateCollection(name string, cfg *CollectionConfig) error {
 	collection := &Collection{
 		config:    cfg,
 		documents: make(map[string]Document),
-		mu:        sync.RWMutex{},          // Ініціалізуємо м'ютекс для колекції
 		indexes:   make(map[string]*Index), // Ініціалізуємо мапу індексів тут
 	}
 	s.collections[name] = collection
